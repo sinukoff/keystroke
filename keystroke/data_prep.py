@@ -2,7 +2,11 @@ import os
 import pandas as pd
 import keystroke
 from keystroke import utils
+import numpy as np
 import pdb
+
+bins_per_scen = 1
+
 
 DATADIR = keystroke.DATADIR
 
@@ -42,11 +46,16 @@ def clean_raw(df):
     df['scenario_num'] = df.groupby('scenarioId').ngroup()
     df['key_ascii'] = utils.keynum_to_ascii(df.key_num)
     df['tdwell'] = df.tstop - df.tstart
-    df = df.sort_values(by=['user_num', 'tstart'])
+    df = df.sort_values(by=['user_num', 'tstart']).reset_index(drop=True)
     groups = df.groupby(['user_num', 'scenario_num'])
-
     # require more than 100 keystrokes in a sample for analysis
-    df = groups.filter(lambda x: x['key_num'].count() > 100)
+    df = groups.filter(lambda x: x['key_num'].count() > 100).reset_index(drop=True)
+
+    df = utils.bin_samples(df, nbins=bins_per_scen)
+
+    df['hloc'], df['vloc'] = utils.keynums_to_keylocs(df.key_num)
+
+    df = get_nloc(df, 2)
 
     for col in ['user_num', 'scenario_num', 'key_num']:
         assert df[col].dtype in ['int32', 'int64'], \
@@ -73,6 +82,30 @@ def save_raw(df):
 def read_cleaned():
     filename = os.path.join(DATADIR, 'raw_cleaned.csv')
     df = pd.read_csv(filename, encoding="ISO-8859-1")
+
+    return df
+
+
+def get_nloc(df, n):
+    hcol = "hloc{}".format(n)
+    vcol = "vloc{}".format(n)
+
+    nloc = pd.DataFrame(index=df.index, columns=[hcol, vcol])
+
+    nloc[hcol] = df.hloc
+    nloc[vcol] = df.vloc
+   # nloc[vcol] = np.array([])
+
+    #todo-what to do about ngrams that span multiple scenarios/users. These are likely to be trimmed out based on time between keys, but maybe not. maybe trim any trigrams > 300
+    nloc[vcol] = df['vloc'].shift(n-1)
+    nloc[hcol] = df['hloc'].shift(n-1)
+    #for i in np.arange(1, n)[::-1]:
+        #nloc[vcol] = pd.Series(np.array(pd.concat([nloc[vcol], df['vloc'].shift(1)], axis=1).get_values()).tolist())
+        #nloc[hcol] = pd.Series(np.array(pd.concat([nloc[hcol], df['hloc'].shift(1)], axis=1).get_values()).tolist())
+
+      #  ngraph[col3] = ngraph[col3] + df.tdwell.shift(i)
+
+    df = df.join(nloc)
 
     return df
 
