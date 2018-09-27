@@ -5,8 +5,8 @@ from keystroke import utils
 import numpy as np
 import pdb
 
-bins_per_scen = 1
-
+bins_per_scen = 4
+ngraphs = [1, 2]
 
 DATADIR = keystroke.DATADIR
 
@@ -48,14 +48,22 @@ def clean_raw(df):
     df['tdwell'] = df.tstop - df.tstart
     df = df.sort_values(by=['user_num', 'tstart']).reset_index(drop=True)
     groups = df.groupby(['user_num', 'scenario_num'])
+
     # require more than 100 keystrokes in a sample for analysis
     df = groups.filter(lambda x: x['key_num'].count() > 100).reset_index(drop=True)
 
+    df['hloc'], df['vloc'], df['zone'] = utils.keynums_to_keylocs(df.key_num)
+
+    df = utils.get_nloc(df, 2)
+
+    for n in ngraphs:
+        df = utils.get_ngraph(df, n)
+
+    df = df[df.tflight2 < 1000.]
+
+    df = df[df.zone.isin([0, 1, 2, 3, 4, 5, 6, 8, 32])].reset_index(drop=True)
+
     df = utils.bin_samples(df, nbins=bins_per_scen)
-
-    df['hloc'], df['vloc'] = utils.keynums_to_keylocs(df.key_num)
-
-    df = get_nloc(df, 2)
 
     for col in ['user_num', 'scenario_num', 'key_num']:
         assert df[col].dtype in ['int32', 'int64'], \
@@ -85,29 +93,6 @@ def read_cleaned():
 
     return df
 
-
-def get_nloc(df, n):
-    hcol = "hloc{}".format(n)
-    vcol = "vloc{}".format(n)
-
-    nloc = pd.DataFrame(index=df.index, columns=[hcol, vcol])
-
-    nloc[hcol] = df.hloc
-    nloc[vcol] = df.vloc
-   # nloc[vcol] = np.array([])
-
-    #todo-what to do about ngrams that span multiple scenarios/users. These are likely to be trimmed out based on time between keys, but maybe not. maybe trim any trigrams > 300
-    nloc[vcol] = df['vloc'].shift(n-1)
-    nloc[hcol] = df['hloc'].shift(n-1)
-    #for i in np.arange(1, n)[::-1]:
-        #nloc[vcol] = pd.Series(np.array(pd.concat([nloc[vcol], df['vloc'].shift(1)], axis=1).get_values()).tolist())
-        #nloc[hcol] = pd.Series(np.array(pd.concat([nloc[hcol], df['hloc'].shift(1)], axis=1).get_values()).tolist())
-
-      #  ngraph[col3] = ngraph[col3] + df.tdwell.shift(i)
-
-    df = df.join(nloc)
-
-    return df
 
 
 if __name__ == "__main__":

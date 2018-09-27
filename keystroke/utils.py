@@ -9,7 +9,7 @@ chars = {}
 
 ngraphs = [1, 2]
 npop = [20, 10]
-
+zones = [1, 2, 3, 4, 5, 6, 8, 32]
 
 def keynum_to_ascii(keynums):
     ascii_str = [chr(item) for item in keynums]
@@ -79,6 +79,8 @@ def bin_samples(df, nbins):
 
 def keynums_to_keylocs(key_nums):
 
+    key_nums = key_nums.astype(int)
+
     toprow = "QWERTYUIOP"
     midrow = "ASDFGHJKL'"
     botrow = "ZXCVBNM."
@@ -118,9 +120,78 @@ def keynums_to_keylocs(key_nums):
         else:
             hloc[num] = num
 
-    hlocs = [int(hloc[i]) for i in key_nums]
-    vlocs = [int(vloc[i]) for i in key_nums]
+   # pdb.set_trace()
+    hlocs = [int(hloc[i]) for i in key_nums.values]
+    vlocs = [int(vloc[i]) for i in key_nums.values]
+    zones = np.array([np.nan]*len(vlocs))
 
-    return hlocs, vlocs
+
+    df = pd.DataFrame({'hloc': hlocs, 'vloc': vlocs, 'zone': zones})
+
+    zone_list = [[0, 0, 1],
+                 [0, 1, 2],
+                 [0, 2, 3],
+                 [1, 0, 4],
+                 [1, 1, 5],
+                 [1, 2, 6],
+                 [8, 8, 8],
+                [32, 32, 32]
+                ]
 
 
+    for zone in zone_list:
+        ind = df[(df.hloc == zone[0]) & (df.vloc == zone[1])].index
+        df.loc[ind, 'zone'] = zone[2]
+    df.zone.fillna(-1, inplace=True)
+    df.zone = df.zone.astype(int)
+
+    return df.hloc.values, df.vloc.values, df.zone.values
+
+
+def get_nloc(df, n):
+    hcol = "hloc{}".format(n)
+    vcol = "vloc{}".format(n)
+    zonecol = "zone{}".format(n)
+
+    nloc = pd.DataFrame(index=df.index, columns=[hcol, vcol, zonecol])
+
+    nloc[hcol] = df.hloc
+    nloc[vcol] = df.vloc
+    nloc[zonecol] = df.zone
+
+    nloc[vcol] = df['vloc'].shift(n-1)
+    nloc[hcol] = df['hloc'].shift(n-1)
+    nloc[zonecol] = df['zone'].shift(n-1)
+
+    #for i in np.arange(1, n)[::-1]:
+        #nloc[vcol] = pd.Series(np.array(pd.concat([nloc[vcol], df['vloc'].shift(1)], axis=1).get_values()).tolist())
+        #nloc[hcol] = pd.Series(np.array(pd.concat([nloc[hcol], df['hloc'].shift(1)], axis=1).get_values()).tolist())
+
+    df = df.join(nloc)
+
+    return df
+
+
+
+def get_ngraph(df, n):
+    col1 = "graph{}".format(n)
+    col2 = "tflight{}".format(n)
+    col3 = "tdwell{}".format(n)
+    df.key_num = df.key_num.astype(str)
+    ngraph = pd.DataFrame(index=df.index, columns=[col1, col2])
+    ngraph[col1] = ''
+    ngraph[col2] = df.tstop - df.tstart.shift(n-1)
+    ngraph[col3] = 0
+
+    #todo-what to do about ngrams that span multiple scenarios/users. These are likely to be trimmed out based on time between keys, but maybe not. maybe trim any trigrams > 300
+    for i in np.arange(0, n)[::-1]:
+        ngraph[col1] = ngraph[col1] + '_' + df.key_num.shift(i)
+        ngraph[col3] = ngraph[col3] + df.tdwell.shift(i)
+
+    ngraph[col2] -= ngraph[col3]
+    ngraph[col1] = ngraph[col1].str[1:]
+    df = df.join(ngraph)
+
+    df.key_num = df.key_num.astype(int)
+
+    return df
