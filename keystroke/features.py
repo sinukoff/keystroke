@@ -8,50 +8,66 @@ import os
 from statsmodels.robust.scale import mad as MAD
 import itertools
 from matplotlib import pyplot as plt
+from statsmodels.robust.scale import mad as MAD
 from sklearn.manifold import TSNE
 from sklearn.impute import SimpleImputer
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import silhouette_samples, silhouette_score
 
 DATADIR = keystroke.DATADIR
 
 ngraphs = [1, 2]
 npop = [20, 10]
-zones = [1, 2, 3, 4, 5, 6, 8, 32]
+zones = [1, 2, 3, 4, 5, 6, 32, 8]
 bins_per_scen = 4
 
-def get_features():
+
+def main():
     df_keystroke = data_prep.read_cleaned()
     df = keystrokes_to_features(df_keystroke)
+    df.to_csv(os.path.join(DATADIR, 'features.csv'), index=False)
 
-    # IMPUTE WITHIN EACH USER
-    for user in df.user_num.unique():
-        ind = df[df.user_num == user].index
-        df.loc[ind, df.columns[3:]] = impute(df.loc[ind, df.columns[3:]], allow_null=True)
-
-    # IMPUTE WITHIN ALL USERS
-    df[df.columns[3:]] = impute(df[df.columns[3:]], allow_null=False)
-
-    df[df.columns[3:]] = StandardScaler().fit_transform(df[df.columns[3:]])
-
-    #df = df[['user_num', 'scenario_num', 'bin_num', 'zoneflight_med_1_3', 'zoneflight_med_3_3']]
-    df195 = df[df.user_num==195]
-    df299 = df[df.user_num == 299]
-    plt.close('all')
-    plt.plot(df195['zoneflight_med_1_3'], df195['zoneflight_med_3_3'], 'o', color='r')
-    plt.plot(df299['zoneflight_med_1_3'], df299['zoneflight_med_3_3'], 'o', color='b')
-    plt.savefig('/Users/evan/Code/Insight/plots/test.pdf', bbox_inches='tight', pad_inches=0.01)
-    plt.close('all')
-    users = df.user_num.values
-
-    pca = PCA(n_components=10)
-    #df = pca.fit_transform(df[df.columns[3:]])
-    #pdb.set_trace()
-    #tsne(df, users=users)
-    tsne(df[df.columns[3:]], users=users)
+    df = pd.read_csv(os.path.join(DATADIR, 'features.csv'))
     pdb.set_trace()
 
-    df_features1 = keystroke_to_user_df(df_keystroke)
+
+def preprocess(df):
+
+    # IMPUTE WITHIN EACH USER
+    uniq = df.drop_duplicates(['user_num', 'scenario_num']).set_index(['user_num', 'scenario_num']).index
+    # for sample in uniq:
+    #     ind = df[(df.user_num == sample[0]) & (df.scenario_num == sample[1])].index
+    #     df.loc[ind, df.columns[3:]] = impute(df.loc[ind, df.columns[3:]], allow_null=True)
+
+    # IMPUTE WITHIN ALL USERS
+    X = impute(df[df.columns[3:]], allow_null=False)
+   # df[df.columns[3:]] = impute(df[df.columns[3:]], allow_null=False)
+
+    #df[df.columns[3:]] = StandardScaler().fit_transform(df[df.columns[3:]])
+   # pdb.set_trace()
+    X = StandardScaler().fit_transform(X)
+    df = pd.DataFrame(X, index=[df.user_num, df.scenario_num, df.bin_num])
+
+    return df
+
+    #df = df[['user_num', 'scenario_num', 'bin_num', 'zoneflight_med_1_3', 'zoneflight_med_3_3']]
+    # df195 = df[df.user_num==195]
+    # df299 = df[df.user_num == 299]
+    # plt.close('all')
+    # plt.plot(df195['zoneflight_med_1_3'], df195['zoneflight_med_3_3'], 'o', color='r')
+    # plt.plot(df299['zoneflight_med_1_3'], df299['zoneflight_med_3_3'], 'o', color='b')
+    # plt.savefig('/Users/evan/Code/Insight/plots/test.pdf', bbox_inches='tight', pad_inches=0.01)
+    # plt.close('all')
+
+
+    #pca = PCA(n_components=10)
+    #df = pca.fit_transform(df[df.columns[3:]])
+    #pdb.set_trace()
+    #tsne(df[df.columns[3:]], users=users)
+
+
+    #df_features1 = keystroke_to_user_df(df_keystroke)
 
   #  df_features1 = keystroke_to_user_df(df_keystroke)
    #df_features2 = keystroke_to_feature_df(df_keystroke)
@@ -62,7 +78,7 @@ def get_features():
    # df_features2.to_csv(filename)
 
 
-    return
+    return X
 
 
 def read_features():
@@ -270,9 +286,28 @@ def keystrokes_to_features(df_keystroke):
 
     users = df_keystroke.drop_duplicates(['user_num', 'scenario_num', 'bin_num'])[['user_num', 'scenario_num', 'bin_num']]
     users = users.groupby('user_num').size().to_frame('cnt')
-    users = users[users.cnt > 6*bins_per_scen].index.tolist()
+    #users = users[users.cnt > 6*bins_per_scen].index.tolist()
+    #users = np.arange(0, 543, 100)
+    df_missed = pd.read_csv(os.path.join(DATADIR, 'missedfrac.csv'))
+    # plt.close('all')
+    # plt.hist(df_missed.missedfrac)
+    # plt.savefig('/Users/evan/Code/Insight/plots/hist_missedfrac', bbox_inches='tight', pad_inches=0.01)
+    # plt.close('all')
+    # pdb.set_trace()
+    ind = df_missed[df_missed.missedfrac.between(0.01, 0.02)].index
+   # ind = df_missed[df_missed.missedfrac < 0].index
+    df_missed = df_missed.loc[ind]
+  #  print(df_missed)
 
-    df_keystroke = df_keystroke[df_keystroke.user_num.isin(users)]
+    keep = df_missed[['user_num', 'scenario_num']].values
+    indkeep = np.array([])
+    for i in keep:
+        print(i, len(keep))
+        if i[0] not in [241]:
+            indkeep = np.append(indkeep, df_keystroke[(df_keystroke.user_num == i[0]) & (df_keystroke.scenario_num == i[1])].index)
+
+    #df_keystroke = df_keystroke[df_keystroke.user_num.isin(users)]
+    df_keystroke = df_keystroke.loc[indkeep]
     inds = df_keystroke[['user_num', 'scenario_num', 'bin_num']].drop_duplicates().set_index(['user_num', 'scenario_num', 'bin_num']).index
     df = pd.DataFrame(index=inds)
     combos = list(itertools.combinations_with_replacement(zones, 2))
@@ -286,20 +321,58 @@ def keystrokes_to_features(df_keystroke):
         df[newcol] = np.nan
         newcol = 'zonedwell_std_{}_{}'.format(zone1, zone2)
         df[newcol] = np.nan
+        newcol = 'zonedwell2_med_{}_{}'.format(zone1, zone2)
+        df[newcol] = np.nan
+        newcol = 'zonedwell2_std_{}_{}'.format(zone1, zone2)
+        df[newcol] = np.nan
+
+        newcol = 'zoneflight_min_{}_{}'.format(zone1, zone2)
+        df[newcol] = np.nan
 
 
+       # for zone1, zone2 in combos:
+       #     ind = df_keystroke[(df_keystroke.zone == zone1) & (df_keystroke.zone2 == zone2) & (df_keystroke.user_num == samp[0]) & (df_keystroke.scenario_num == samp[1]) & (df_keystroke.bin_num == samp[2])].index
 
 
-    for samp in df.index:
+    for i, samp in enumerate(df.index):
+        print("{}/{}".format(i+1, len(df.index)))
         for zone1, zone2 in combos:
+            ind = df_keystroke[(df_keystroke.zone == zone1) & (df_keystroke.zone2 == zone2) & (df_keystroke.user_num == samp[0]) & (df_keystroke.scenario_num == samp[1]) & (df_keystroke.bin_num == samp[2])].index
+
             col = 'zoneflight_med_{}_{}'.format(zone1, zone2)
-            df.loc[samp, col] = np.median(df_keystroke['tflight2'][(df_keystroke.zone == zone1) & (df_keystroke.zone2 == zone2) & (df_keystroke.user_num == samp[0]) & (df_keystroke.scenario_num == samp[1]) & (df_keystroke.bin_num == samp[2])] )
-            col = 'zoneflight_std_{}_{}'.format(zone1, zone2)
-            df.loc[samp, col] = np.std(df_keystroke['tflight2'][(df_keystroke.zone == zone1) & (df_keystroke.zone2 == zone2) & (df_keystroke.user_num == samp[0]) & (df_keystroke.scenario_num == samp[1]) & (df_keystroke.bin_num == samp[2])] )
+            df.loc[samp, col] = np.median(df_keystroke.loc[ind, 'tflight2'])
+
+           # col = 'zoneflight_std_{}_{}'.format(zone1, zone2)
+           # df.loc[samp, col] = MAD(df_keystroke.loc[ind, 'tflight2'])
+
             col = 'zonedwell_med_{}_{}'.format(zone1, zone2)
-            df.loc[samp, col] = np.median(df_keystroke['tdwell'][(df_keystroke.zone == zone1) & (df_keystroke.zone2 == zone2) & (df_keystroke.user_num == samp[0]) & (df_keystroke.scenario_num == samp[1]) & (df_keystroke.bin_num == samp[2])] )
-            col = 'zonedwell_std_{}_{}'.format(zone1, zone2)
-            df.loc[samp, col] = np.std(df_keystroke['tdwell'][(df_keystroke.zone == zone1) & (df_keystroke.zone2 == zone2) & (df_keystroke.user_num == samp[0]) & (df_keystroke.scenario_num == samp[1]) & (df_keystroke.bin_num == samp[2])] )
+            df.loc[samp, col] = np.median(df_keystroke.loc[ind, 'tdwell'])
+
+           # col = 'zonedwell_std_{}_{}'.format(zone1, zone2)
+           # df.loc[samp, col] = MAD(df_keystroke.loc[ind, 'tdwell'])
+
+            col = 'zonedwell2_med_{}_{}'.format(zone1, zone2)
+            df.loc[samp, col] = np.median(df_keystroke.loc[ind, 'tdwell2'])
+
+           # col = 'zonedwell2_std_{}_{}'.format(zone1, zone2)
+           # df.loc[samp, col] = MAD(df_keystroke.loc[ind, 'tdwell2'])
+
+           # col = 'zoneflight_min_{}_{}'.format(zone1, zone2)
+           # df.loc[samp, col] = np.min(df_keystroke.loc[ind, 'tflight2'])
+
+
+
+            # df.loc[samp, col] = np.median(df_keystroke['tflight2'][(df_keystroke.zone == zone1) & (df_keystroke.zone2 == zone2) & (df_keystroke.user_num == samp[0]) & (df_keystroke.scenario_num == samp[1]) & (df_keystroke.bin_num == samp[2])] )
+            # col = 'zoneflight_std_{}_{}'.format(zone1, zone2)
+            # df.loc[samp, col] = np.std(df_keystroke['tflight2'][(df_keystroke.zone == zone1) & (df_keystroke.zone2 == zone2) & (df_keystroke.user_num == samp[0]) & (df_keystroke.scenario_num == samp[1]) & (df_keystroke.bin_num == samp[2])] )
+            # col = 'zonedwell_med_{}_{}'.format(zone1, zone2)
+            # df.loc[samp, col] = np.median(df_keystroke['tdwell'][(df_keystroke.zone == zone1) & (df_keystroke.zone2 == zone2) & (df_keystroke.user_num == samp[0]) & (df_keystroke.scenario_num == samp[1]) & (df_keystroke.bin_num == samp[2])] )
+            # col = 'zonedwell_std_{}_{}'.format(zone1, zone2)
+            # df.loc[samp, col] = np.std(df_keystroke['tdwell'][(df_keystroke.zone == zone1) & (df_keystroke.zone2 == zone2) & (df_keystroke.user_num == samp[0]) & (df_keystroke.scenario_num == samp[1]) & (df_keystroke.bin_num == samp[2])] )
+            # col = 'zonedwell2_med_{}_{}'.format(zone1, zone2)
+            # df.loc[samp, col] = np.median(df_keystroke['tdwell2'][(df_keystroke.zone == zone1) & (df_keystroke.zone2 == zone2) & (df_keystroke.user_num == samp[0]) & (df_keystroke.scenario_num == samp[1]) & (df_keystroke.bin_num == samp[2])] )
+            # col = 'zonedwell2_std_{}_{}'.format(zone1, zone2)
+            # df.loc[samp, col] = np.std(df_keystroke['tdwell2'][(df_keystroke.zone == zone1) & (df_keystroke.zone2 == zone2) & (df_keystroke.user_num == samp[0]) & (df_keystroke.scenario_num == samp[1]) & (df_keystroke.bin_num == samp[2])] )
 
 
     cols = df.columns
@@ -339,26 +412,86 @@ def impute(df_features, allow_null=True):
     return df_imputed
 
 
-def tsne(df, users):
-    plt.close('all')
-    X_embedded = TSNE(learning_rate=20, perplexity=4*bins_per_scen, n_iter=100000, n_iter_without_progress=1000, init='random').fit_transform(df)
-    xs = X_embedded[:, 0]
-    ys = X_embedded[:, 1]
-    xmin = np.argmin(xs)
-    xmax = np.argmax(xs)
-    ymin = np.argmax(ys)
-    ymax = np.argmax(ys)
 
-    xs = np.delete(xs, [xmin, xmax, ymin, ymax])
-    ys = np.delete(ys, [xmin, xmax, ymin, ymax])
-    users = np.delete(users, [xmin, xmax, ymin, ymax])
+def plot_tsne(df):
+    users = df.user_num.values
 
-    plt.scatter(xs, ys, c=users, s=5*np.sqrt(users))
-    plt.savefig('/Users/evan/Code/Insight/plots/tsne/tsne_test.pdf', bbox_inches='tight', pad_inches=0.01)
-    plt.close('all')
+    plotting.tsne(df, users=users)
 
 
 
+def silhouette_scores():
+
+    A = np.zeros([8, 8])
+    A[1-1, 1-1] = -0.37
+    A[1-1, 2-1] = -0.42
+    A[1-1, 3-1] = -0.40
+    A[1-1, 4-1] = -0.50
+    A[1-1, 5-1] = -0.49
+    A[1-1, 6-1] = -0.40
+    A[1-1, 7-1] = -0.44
+    A[1-1, 8-1] = -0.49
+    A[2-1, 1-1] = -0.42
+    A[2-1, 2-1] = -0.42
+    A[2-1, 3-1] = -0.26
+    A[2-1, 4-1] = -0.37
+    A[2-1, 5-1] = -0.38
+    A[2-1, 6-1] = -0.35
+    A[2-1, 7-1] = -0.35
+    A[2-1, 8-1] = -0.33
+    A[3-1, 1-1] = -0.40
+    A[3-1, 2-1] = -0.26
+    A[3-1, 3-1] = -0.33
+    A[3-1, 4-1] = -0.40
+    A[3-1, 5-1] = -0.32
+    A[3-1, 6-1] = -0.22
+    A[3-1, 7-1] = -0.33
+    A[3-1, 8-1] = -0.42
+    A[4-1, 1-1] = -0.50
+    A[4-1, 2-1] = -0.37
+    A[4-1, 3-1] = -0.40
+    A[4-1, 4-1] = -0.53
+    A[4-1, 5-1] = -0.48
+    A[4-1, 6-1] = -0.32
+    A[4-1, 7-1] = -0.42
+    A[4-1, 8-1] = -0.39
+    A[5-1, 1-1] = -0.49
+    A[5-1, 2-1] = -0.38
+    A[5-1, 3-1] = -0.32
+    A[5-1, 4-1] = -0.48
+    A[5-1, 5-1] = -0.48
+    A[5-1, 6-1] = -0.35
+    A[5-1, 7-1] = -0.43
+    A[5-1, 8-1] = -0.40
+    A[6-1, 1-1] = -0.40
+    A[6-1, 2-1] = -0.35
+    A[6-1, 3-1] = -0.22
+    A[6-1, 4-1] = -0.32
+    A[6-1, 5-1] = -0.35
+    A[6-1, 6-1] = -0.41
+    A[6-1, 7-1] = -0.33
+    A[6-1, 8-1] = -0.33
+    A[7-1, 1-1] = -0.44
+    A[7-1, 2-1] = -0.35
+    A[7-1, 3-1] = -0.33
+    A[7-1, 4-1] = -0.42
+    A[7-1, 5-1] = -0.43
+    A[7-1, 6-1] = -0.33
+    A[7-1, 7-1] = -0.43
+    A[7-1, 8-1] = -0.42
+    A[8-1, 8-1] = -0.49
+    A[8-1, 1-1] = -0.49
+    A[8-1, 2-1] = -0.33
+    A[8-1, 3-1] = -0.31
+    A[8-1, 4-1] = -0.39
+    A[8-1, 5-1] = -0.40
+    A[8-1, 6-1] = -0.33
+    A[8-1, 7-1] = -0.42
+    A[8-1, 8-1] = -0.49
+
+
+if __name__ == "__main__":
+    main()
 
 # def get_dwell_times(df_keystroke, npop):
 #     keyfreq = df_keystroke.groupby(['key_num']).size()
