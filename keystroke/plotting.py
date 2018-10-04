@@ -215,7 +215,7 @@ def plot_2dhist():
 
 
 
-def plot_tsne(X, y):
+def plot_tsne(X, y, scenarios):
     #users = df.user_num.values
     plt.close('all')
     X_embedded = TSNE(learning_rate=20, perplexity=4, n_iter=100000, n_iter_without_progress=1000, init='random').fit(X)
@@ -235,7 +235,7 @@ def plot_tsne(X, y):
 
     plt.scatter(xs, ys, c=y, s=y+2, alpha=1)
     for i in range(len(xs)):
-        plt.text(xs[i], ys[i], str(y[i]))
+        plt.text(xs[i], ys[i], str(y[i]) + ' ' + str(scenarios[i]))
 
     plt.savefig('/Users/evan/Code/Insight/plots/tsne/tsne_test.pdf', bbox_inches='tight', pad_inches=0.01)
     plt.close('all')
