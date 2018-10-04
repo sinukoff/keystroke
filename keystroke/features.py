@@ -1,5 +1,5 @@
 from nltk import ngrams
-from keystroke import data_prep, utils
+from keystroke import data_prep, utils, plotting
 import pandas as pd
 import numpy as np
 import pdb
@@ -20,7 +20,7 @@ DATADIR = keystroke.DATADIR
 ngraphs = [1, 2]
 npop = [20, 10]
 zones = [1, 2, 3, 4, 5, 6, 32, 8]
-bins_per_scen = 4
+bins_per_scen = 8
 
 
 def main():
@@ -29,14 +29,14 @@ def main():
     df.to_csv(os.path.join(DATADIR, 'features.csv'), index=False)
 
     df = pd.read_csv(os.path.join(DATADIR, 'features.csv'))
-    pdb.set_trace()
+    #pdb.set_trace()
 
 
 def preprocess(df):
 
     # IMPUTE WITHIN EACH USER
-    uniq = df.drop_duplicates(['user_num', 'scenario_num']).set_index(['user_num', 'scenario_num']).index
-    # for sample in uniq:
+    #uniq = df.drop_duplicates(['user_num', 'scenario_num']).set_index(['user_num', 'scenario_num']).index
+    #for sample in uniq:
     #     ind = df[(df.user_num == sample[0]) & (df.scenario_num == sample[1])].index
     #     df.loc[ind, df.columns[3:]] = impute(df.loc[ind, df.columns[3:]], allow_null=True)
 
@@ -47,9 +47,11 @@ def preprocess(df):
     #df[df.columns[3:]] = StandardScaler().fit_transform(df[df.columns[3:]])
    # pdb.set_trace()
     X = StandardScaler().fit_transform(X)
-    df = pd.DataFrame(X, index=[df.user_num, df.scenario_num, df.bin_num])
+    df_out = pd.DataFrame(X, index=[df.user_num, df.scenario_num, df.bin_num]).reset_index()
 
-    return df
+    #plotting.plot_tsne(X, y=df_out.user_num.values, scenarios=df_out.scenario_num.values)
+
+    return df_out
 
     #df = df[['user_num', 'scenario_num', 'bin_num', 'zoneflight_med_1_3', 'zoneflight_med_3_3']]
     # df195 = df[df.user_num==195]
@@ -294,8 +296,10 @@ def keystrokes_to_features(df_keystroke):
     # plt.savefig('/Users/evan/Code/Insight/plots/hist_missedfrac', bbox_inches='tight', pad_inches=0.01)
     # plt.close('all')
     # pdb.set_trace()
-    ind = df_missed[df_missed.missedfrac.between(0.01, 0.02)].index
-   # ind = df_missed[df_missed.missedfrac < 0].index
+   # pdb.set_trace()
+    #ind = df_missed[df_missed.missedfrac.between(0.01, 0.02)].index
+   # ind = df_missed[df_missed.user_num.isin([5, 33, 40, 41, 42, 47, 54, 57, 61, 65, 68, 77, 87])].index
+    ind = df_missed[(df_missed.missedfrac.between(0.00, 0.10)) & ((df_missed.user_num.isin([33, 41, 160, 212, 377, 395, 426, 460])) | (df_missed.user_num.isin([42, 65, 97, 101, 123, 154, 206, 309, 326, 400, 492, 494, 517])) )].index
     df_missed = df_missed.loc[ind]
   #  print(df_missed)
 
@@ -310,24 +314,35 @@ def keystrokes_to_features(df_keystroke):
     df_keystroke = df_keystroke.loc[indkeep]
     inds = df_keystroke[['user_num', 'scenario_num', 'bin_num']].drop_duplicates().set_index(['user_num', 'scenario_num', 'bin_num']).index
     df = pd.DataFrame(index=inds)
-    combos = list(itertools.combinations_with_replacement(zones, 2))
+    combos = list(itertools.product(zones, repeat=2))
+    zonefreq = df_keystroke.groupby(['zone', 'zone2']).size().sort_values(ascending=False).to_frame('zonefreq').reset_index().iloc[0:20]
 
+    zonekeep = []
+    combos_new = pd.Series(combos)
+    for i in range(len(combos_new)):
+        if len(zonefreq[(zonefreq.zone == combos_new[i][0]) & (zonefreq.zone2 == combos_new[i][1])]) > 0:
+            zonekeep.append(i)
+
+    #pdb.set_trace()
+    combos = combos_new[zonekeep].tolist()
+
+   # pdb.set_trace()
     for zone1, zone2 in combos:
         newcol = 'zoneflight_med_{}_{}'.format(zone1, zone2)
         df[newcol] = np.nan
-        newcol = 'zoneflight_std_{}_{}'.format(zone1, zone2)
-        df[newcol] = np.nan
+      #  newcol = 'zoneflight_std_{}_{}'.format(zone1, zone2)
+      #  df[newcol] = np.nan
         newcol = 'zonedwell_med_{}_{}'.format(zone1, zone2)
         df[newcol] = np.nan
-        newcol = 'zonedwell_std_{}_{}'.format(zone1, zone2)
-        df[newcol] = np.nan
+       # newcol = 'zonedwell_std_{}_{}'.format(zone1, zone2)
+      #  df[newcol] = np.nan
         newcol = 'zonedwell2_med_{}_{}'.format(zone1, zone2)
         df[newcol] = np.nan
-        newcol = 'zonedwell2_std_{}_{}'.format(zone1, zone2)
-        df[newcol] = np.nan
+       # newcol = 'zonedwell2_std_{}_{}'.format(zone1, zone2)
+       # df[newcol] = np.nan
 
-        newcol = 'zoneflight_min_{}_{}'.format(zone1, zone2)
-        df[newcol] = np.nan
+       # newcol = 'zoneflight_min_{}_{}'.format(zone1, zone2)
+       # df[newcol] = np.nan
 
 
        # for zone1, zone2 in combos:
@@ -354,8 +369,8 @@ def keystrokes_to_features(df_keystroke):
             col = 'zonedwell2_med_{}_{}'.format(zone1, zone2)
             df.loc[samp, col] = np.median(df_keystroke.loc[ind, 'tdwell2'])
 
-           # col = 'zonedwell2_std_{}_{}'.format(zone1, zone2)
-           # df.loc[samp, col] = MAD(df_keystroke.loc[ind, 'tdwell2'])
+            #col = 'zonedwell2_std_{}_{}'.format(zone1, zone2)
+            #df.loc[samp, col] = MAD(df_keystroke.loc[ind, 'tdwell2'])
 
            # col = 'zoneflight_min_{}_{}'.format(zone1, zone2)
            # df.loc[samp, col] = np.min(df_keystroke.loc[ind, 'tflight2'])
@@ -415,8 +430,9 @@ def impute(df_features, allow_null=True):
 
 def plot_tsne(df):
     users = df.user_num.values
+    scenarios = df.scenario_num.values
 
-    plotting.tsne(df, users=users)
+    plotting.tsne(df, users=users, scenarios=scenarios)
 
 
 
