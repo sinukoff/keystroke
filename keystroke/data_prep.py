@@ -5,7 +5,7 @@ from keystroke import utils
 import numpy as np
 import pdb
 
-bins_per_scen = 4
+bins_per_scen = 8
 ngraphs = [1, 2]
 
 DATADIR = keystroke.DATADIR
