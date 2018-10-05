@@ -241,3 +241,22 @@ def plot_tsne(X, y, scenarios):
     plt.close('all')
 
     return
+
+
+def plot_roc(truneg, trupos):
+
+    plt.close('all')
+    plt.plot(1.0 - np.array(trueneg), truepos, color='b')
+    plt.xlabel('Fraction Mis-identified as Imposters', fontsize=14)
+    plt.xticks([0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+    plt.yticks([0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+    plt.xlim(0, 1)
+    plt.ylim(0, 1)
+    plt.ylabel('Fraction of Imposters Identified', fontsize=14)
+    plt.plot([0, 1], [0, 1], '--', color='k', lw=0.5)
+    ax=plt.gca()
+    plt.grid(lw=0.3)
+    plt.savefig('/Users/evan/roctest.pdf', bbox_inches='tight', pad_inches=0.01)
+    plt.close('all')
+
+    #plt.
