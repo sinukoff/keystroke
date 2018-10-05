@@ -13,13 +13,13 @@ from sklearn.metrics import classification_report
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import roc_curve
 from sklearn.metrics import roc_auc_score
+from sklearn.metrics import classification_report
 import itertools
 
 import random
 
 import pdb
-
-
+bins_per_scen = 8
 
 def main():
 
@@ -33,15 +33,48 @@ def main():
     #user_uniq = np.unique(userlist)
     user_uniq = np.unique(userlist)
 
-    tn = []
-    tp = []
 
-    for user in user_uniq:
-        df_user = df[df.user_num == user]
-        df_imposters = df[df.user_num != user]
-        results = outlier_test(df_user, df_imposters)
-        tn.append(results[0])
-        tp.append(results[1])
+    Pstep = 1./bins_per_scen
+    Pthresh = np.linspace(0, 1, bins_per_scen+1)
+    truepos = []
+    trueneg = []
+    for p in Pthresh:
+        tn = []
+        tp = []
+        truth_labels = np.array([])
+        predicted_labels = np.array([])
+
+        for user in user_uniq:
+            df_user = df[df.user_num == user]
+            df_imposters = df[df.user_num != user]
+            results = outlier_test(df_user, df_imposters, p)
+            tn.append(results[0])
+            tp.append(results[1])
+            truth_labels = np.append(truth_labels, results[2])
+            predicted_labels = np.append(predicted_labels, results[3])
+
+        df_out = pd.DataFrame({'truth': truth_labels, 'pred': predicted_labels})
+        df_pos = df_out[df_out.truth == -1]
+        df_neg = df_out[df_out.truth == 1]
+
+        npos_success = len(df_pos[df_pos.pred == -1])/float(len(df_pos))
+        nneg_success = len(df_neg[df_neg.pred == 1]) / float(len(df_neg))
+
+        truepos.append(npos_success)
+        trueneg.append(nneg_success)
+
+    pdb.set_trace()
+
+    df_roc = pd.DataFrame({'truepos': truepos, 'trueneg': trueneg})
+
+
+
+
+
+    print(confusion_matrix(predicted_labels, truth_labels))
+    print(classification_report(predicted_labels, truth_labels))
+
+
 
     print(np.mean(tn), np.mean(tp))
 
@@ -67,7 +100,7 @@ def main():
 
 
 
-def outlier_test(df_user, df_imposter):
+def outlier_test(df_user, df_imposter, Pthresh):
 
 
   #  df_user = df_user.set_index(['user_num', 'scenario_num', 'bin_num'])
@@ -77,7 +110,7 @@ def outlier_test(df_user, df_imposter):
    # y_user = df_user.index.get_level_values(level=0)
    # clf = OneClassSVM(nu=0.1, kernel="linear", gamma=0.1)
    # clf = EllipticEnvelope(contamination=0.01)
-    clf = IsolationForest(n_estimators=200, contamination=0.25, max_features=20, random_state=10, verbose=False)
+    clf = IsolationForest(n_estimators=100, contamination=0.25, max_features=20, random_state=10, verbose=False)
     lpo = LeavePOut(1)
    # X_user = lpo.split(X_user)
 
@@ -127,33 +160,38 @@ def outlier_test(df_user, df_imposter):
 
     Pright_user = []
     Pwrong_user = []
-    Pthresh = 0.2 #(need this fraction matching)
+   # Pthresh = 0.2 #(need this fraction matching)
     success_neg = []
     success_pos = []
 
     success_neg_frac_user = []
     success_pos_frac_user = []
+    truth_label = []
+    predicted_label = []
 
     for i, j in itertools.combinations(range(Nscen), 2):
         df1 = df_user_list[i]
         df2 = df_user_list[j]
 
         user_fit = train_svm(clf, df1.values)
-        samescen_pred = predict_svm(clf, df1.values)
+       # samescen_pred = predict_svm(clf, df1.values)
        # print(samescen_pred)
         diffscen_pred = predict_svm(user_fit, df2.values)
-        print(diffscen_pred)
+       # print(diffscen_pred)
         Nright = len(diffscen_pred[diffscen_pred == 1])
         Nwrong = len(diffscen_pred[diffscen_pred == -1])
         Pright = Nright / float(Nright + Nwrong)
         Pwrong = Nwrong / float(Nright + Nwrong)
         Pright_user.append(Pright)
-        print(Pright)
+       # print(Pright)
         Pwrong_user.append(Pwrong)
         if Pright >= Pthresh:
             success_neg.append(1)
+            predicted_label.append(1)
         else:
             success_neg.append(0)
+            predicted_label.append(-1)
+        truth_label.append(1)
 
     success_neg_frac = np.sum(success_neg) / float(len(success_neg))
    # success_neg_frac_user.append(success_neg_frac)
@@ -173,24 +211,27 @@ def outlier_test(df_user, df_imposter):
         user_fit = train_svm(clf, df1.values)
         for df_imp_i in df_imp_list:
             imp_pred = predict_svm(clf, df_imp_i.values)
-            print(imp_pred)
+           # print(imp_pred)
             Nright = len(imp_pred[imp_pred == -1])
             Nwrong = len(imp_pred[imp_pred ==  1])
             Pright = Nright / float(Nright + Nwrong)
             Pwrong = Nwrong / float(Nright + Nwrong)
-            print(Pright)
+           # print(Pright)
             #Pright_user.append(Pright)
            # Pwrong_user.append(Pwrong)
             if Pright > (1.0 - Pthresh):
                 success_pos.append(1)
+                predicted_label.append(-1)
             else:
                 success_pos.append(0)
+                predicted_label.append(1)
+            truth_label.append(-1)
 
     success_pos_frac = np.sum(success_pos)/float(len(success_pos))
     #success_pos_frac_user.append(success_pos_frac)
    # print(success_neg_frac, success_pos_frac)
     #pdb.set_trace()
-    return success_neg_frac, success_pos_frac
+    return success_neg_frac, success_pos_frac, truth_label, predicted_label
 
   # for dfi in df_user_list:
   #      # print(dfi.index)
