@@ -6,6 +6,7 @@ from keystroke import utils
 ngraphs = keystroke.ngraphs
 DATADIR = keystroke.DATADIR
 bins_per_scen = keystroke.bins_per_scen
+zones = keystroke.zones
 
 
 def main():
@@ -52,14 +53,13 @@ def clean_raw(df):
     df = groups.filter(lambda x: x['key_num'].count() > 100).reset_index(drop=True)
 
     df['hloc'], df['vloc'], df['zone'] = utils.keynums_to_keylocs(df.key_num)
-
     df = utils.get_nloc(df, 2)
 
     for n in ngraphs:
         df = utils.get_ngraph(df, n)
 
     df = df[df.tflight2.abs() < 1000.]
-    df = df[df.zone.isin([0, 1, 2, 3, 4, 5, 6, 8, 32])].reset_index(drop=True)
+    df = df[df.zone.isin(zones)].reset_index(drop=True)
 
     df = utils.bin_samples(df, nbins=bins_per_scen)
 
