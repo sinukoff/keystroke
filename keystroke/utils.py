@@ -1,21 +1,16 @@
 import numpy as np
-import pdb
 import keystroke
 import os
 import pandas as pd
+
 DATADIR = keystroke.DATADIR
+ngraphs = keystroke.ngraphs
 
-chars = {}
-
-ngraphs = [1, 2]
-npop = [20, 10]
-zones = [1, 2, 3, 4, 5, 6, 8, 32]
 
 def keynum_to_ascii(keynums):
     ascii_str = [chr(item) for item in keynums]
     ascii_str = np.array(ascii_str)
     ascii_str[ascii_str == '\r'] = ' '
-    #pdb.set_trace()
     return ascii_str
 
 
@@ -26,7 +21,7 @@ def key_freq():
    # print(np.sort(df.key_num.unique()))
 
 
-def get_topgraphs():
+def get_topgraphs(df_keystroke):
     topgraphs = {}
     for i, n in enumerate(ngraphs):
         col = "graph{}".format(n)
@@ -195,3 +190,42 @@ def get_ngraph(df, n):
     df.key_num = df.key_num.astype(int)
 
     return df
+
+
+def get_missed_frac():
+
+    response_filename = os.path.join(DATADIR, 'responses.csv')
+
+    df_text = pd.read_csv(
+        response_filename,
+        encoding="ISO-8859-1"
+    )
+
+    df_missed = pd.DataFrame(columns=['user_num', 'scenario_num', 'nobs', 'ndel', 'ntrue', 'missedfrac'])
+    user = []
+    scenario = []
+    nobs = []
+    ndel = []
+    ntrue = []
+
+    for n, i in enumerate(df[['userId', 'scenarioId']].drop_duplicates().values):
+        print(n)
+
+        try:
+            ntrue.append(len(df_text[(df_text.userId == i[0]) & (df_text.scenarioId == i[1])].answers.iloc[0]))
+        except IndexError:
+            print('missed', n)
+            continue
+
+        user.append(df.loc[df.userId == i[0], 'user_num'].iloc[0])
+        scenario.append(df.loc[df.scenarioId == i[1], 'scenario_num'].iloc[0])
+        nobs.append(len(df[(df.userId == i[0]) & (df.scenarioId == i[1])]))
+        ndel.append(len(df[(df.userId == i[0]) & (df.scenarioId == i[1]) & (df.key_num == 8)]))
+
+    df_missed.user_num = user
+    df_missed.scenario_num = scenario
+    df_missed.nobs = nobs
+    df_missed.ndel = ndel
+    df_missed.ntrue = ntrue
+    df_missed.missedfrac = (df_missed.ntrue + df_missed.ndel - df_missed.nobs)/(df_missed.ntrue + df_missed.ndel)
+    df_missed.to_csv(os.path.join(DATADIR, 'missedfrac.csv'))
