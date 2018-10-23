@@ -4,7 +4,6 @@ import os
 import pandas as pd
 
 DATADIR = keystroke.DATADIR
-ngraphs = keystroke.ngraphs
 
 
 def keynum_to_ascii(keynums):
@@ -21,7 +20,7 @@ def key_freq():
    # print(np.sort(df.key_num.unique()))
 
 
-def get_topgraphs(df_keystroke):
+def get_topgraphs(df_keystroke, ngraphs):
     topgraphs = {}
     for i, n in enumerate(ngraphs):
         col = "graph{}".format(n)
@@ -123,6 +122,8 @@ def keynums_to_keylocs(key_nums):
 
     df = pd.DataFrame({'hloc': hlocs, 'vloc': vlocs, 'zone': zones})
 
+    #define zones in terms of hloc and vloc
+    #hloc, vloc, zone
     zone_list = [[0, 0, 1],
                  [0, 1, 2],
                  [0, 2, 3],
@@ -132,7 +133,6 @@ def keynums_to_keylocs(key_nums):
                  [8, 8, 8],
                 [32, 32, 32]
                 ]
-
 
     for zone in zone_list:
         ind = df[(df.hloc == zone[0]) & (df.vloc == zone[1])].index
@@ -158,13 +158,9 @@ def get_nloc(df, n):
     nloc[hcol] = df['hloc'].shift(n-1)
     nloc[zonecol] = df['zone'].shift(n-1)
 
-    #for i in np.arange(1, n)[::-1]:
-        #nloc[vcol] = pd.Series(np.array(pd.concat([nloc[vcol], df['vloc'].shift(1)], axis=1).get_values()).tolist())
-        #nloc[hcol] = pd.Series(np.array(pd.concat([nloc[hcol], df['hloc'].shift(1)], axis=1).get_values()).tolist())
+    df_out = df.join(nloc)
 
-    df = df.join(nloc)
-
-    return df
+    return df_out
 
 
 
@@ -173,7 +169,7 @@ def get_ngraph(df, n):
     col2 = "tflight{}".format(n)
     col3 = "tdwell{}".format(n)
     df.key_num = df.key_num.astype(str)
-    ngraph = pd.DataFrame(index=df.index, columns=[col1, col2])
+    ngraph = pd.DataFrame(index=df.index, columns=[col2])
     ngraph[col1] = ''
     ngraph[col2] = df.tstop - df.tstart.shift(n-1)
     ngraph[col3] = 0
