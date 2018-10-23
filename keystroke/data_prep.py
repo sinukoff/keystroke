@@ -1,15 +1,15 @@
 import os
+import numpy as np
 import pandas as pd
 import keystroke
 from keystroke import utils
 
-ngraphs = keystroke.ngraphs
 DATADIR = keystroke.DATADIR
-bins_per_scen = keystroke.bins_per_scen
-zones = keystroke.zones
-
 
 def main():
+    """
+    Main executable to read, clean, and save raw keystroke data
+    """
     df = read_raw()
     df = clean_raw(df)
     save_raw(df)
@@ -17,14 +17,20 @@ def main():
     return
 
 
-def read_raw():
-    filename = os.path.join(DATADIR, 'keystroke_raw.csv')
-    df = pd.read_csv(filename)
-    df = df
-    return df
 
+def addcols_raw(df, ngraph_max):
+    """"
+    -Modifies column names of raw keystroke data and adds new columns:
+        -for N = 0 to ngraph_max - 1, the following columns are added:
+            tdwellN: Sum of dwell times for each key and N previous keys
+            tflightN: Sum of flight times between each key and N previous keys (meaningless for N=0)
+            zoneN:, Zone of key N rows before current key
 
-def clean_raw(df):
+    Args:
+        df (DataFrame): Raw keystroke time-series data.
+        ngraphs_max (int): Flight times and dwell times will be computed for sequences of size 1 to n
+    """
+
     df.rename(columns={'key': 'key_num',
                        'pushedDownAt': 'tstart',
                        'pushedUpAt': 'tstop'
@@ -44,24 +50,11 @@ def clean_raw(df):
     df['scenario_num'] = df.groupby('scenarioId').ngroup()
     df['key_ascii'] = utils.keynum_to_ascii(df.key_num)
     df['tdwell'] = df.tstop - df.tstart
-    df = df.sort_values(
-        by=['user_num', 'tstart']
-    ).drop_duplicates(['user_num', 'tstart', 'tstop']).reset_index(drop=True)
-    groups = df.groupby(['user_num', 'scenario_num'])
 
-    # require more than 100 keystrokes in a sample for analysis
-    df = groups.filter(lambda x: x['key_num'].count() > 100).reset_index(drop=True)
-
-    df['hloc'], df['vloc'], df['zone'] = utils.keynums_to_keylocs(df.key_num)
-    df = utils.get_nloc(df, 2)
-
-    for n in ngraphs:
-        df = utils.get_ngraph(df, n)
-
-    df = df[df.tflight2.abs() < 1000.]
-    df = df[df.zone.isin(zones)].reset_index(drop=True)
-
-    df = utils.bin_samples(df, nbins=bins_per_scen)
+    df.sort_values(by=['user_num', 'tstart'], inplace=True)
+    # Remove duplicate keystrokes
+    df.drop_duplicates(['user_num', 'tstart', 'tstop'], inplace=True)
+    df.reset_index(drop=True, inplace=True)
 
     for col in ['user_num', 'scenario_num', 'key_num']:
         assert df[col].dtype in ['int32', 'int64'], \
@@ -75,14 +68,35 @@ def clean_raw(df):
         assert df[col].dtype in ['object'], \
             "data type of '{}' column must be object".format(col)
 
+    # Add columns specifying location on keyboard
+    df['hloc'], df['vloc'], df['zone'] = utils.keynums_to_keylocs(df.key_num)
+
+    for n in np.arange(2, ngraph_max + 1, 1):
+        df = utils.get_nloc(df, n)
+
+    for n in np.arange(1, ngraph_max + 1, 1):
+        df = utils.get_ngraph(df, n)
+
     return df
 
 
-def save_raw(df):
-    filename = os.path.join(DATADIR, 'raw_cleaned.csv')
-    df.to_csv(filename, index=False)
+def filter_raw(df, min_keys, min_flight, zones):
+    """
+    -Removes responses with fewer than min_keys keystrokes
+        -Adds columns with dwell times flight times:
+            -tdwellN = Sum of dwell times for current keystroke and previous N-1 keystrokes.
+            -tflightN = Sum of flight times for current keystroke and previous N-1 keystrokes.
+    """
 
-    return
+    groups = df.groupby(['user_num', 'scenario_num'])
+
+    # Require more than 100 keystrokes in a sample for analysis
+    df = groups.filter(lambda x: x['key_num'].count() > min_keys).reset_index(drop=True)
+    df = df[df.tflight2.abs() < min_flight]
+    df = df[df.zone.isin(zones)].reset_index(drop=True)
+
+    return df
+
 
 
 def read_cleaned():
