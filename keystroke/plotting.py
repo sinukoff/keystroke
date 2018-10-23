@@ -137,13 +137,13 @@ def hist_keys_per_scenario(df=None):
     plt.savefig('/Users/evan/Code/Insight/plots/hist_keys_per_scenario.pdf', bbox_inches='tight', pad_inches=0.01)
 
 
-def plot_tsne(X, y, scenarios):
+def plot_tsne(X, y, nchunks, perplexity, learnrate, saveto):
     from scipy.stats import rankdata as rd
     #users = df.user_num.values
     plt.close('all')
    # X_embedded = TSNE(learning_rate=20, perplexity=4, n_iter=100000, n_iter_without_progress=1000, init='random').fit(X)
    # print(X_embedded.kl_divergence_)
-    X_embedded = TSNE(learning_rate=200, perplexity=6, n_iter=100000, n_iter_without_progress=1000, init='random', random_state=25).fit_transform(X)
+    X_embedded = TSNE(perplexity=perplexity, learning_rate=learnrate, n_iter=100000, n_iter_without_progress=1000, init='random', random_state=25).fit_transform(X)
     print(silhouette_score(X_embedded, y))
     xs = X_embedded[:, 0]
     ys = X_embedded[:, 1]
@@ -155,8 +155,12 @@ def plot_tsne(X, y, scenarios):
     # xs = np.delete(xs, [xmin, xmax, ymin, ymax])
     # ys = np.delete(ys, [xmin, xmax, ymin, ymax])
     # users = np.delete(users, [xmin, xmax, ymin, ymax])
-    for i in range(int(len(xs)/5)):
-        y[i*5:(i+1)*5] = i
+    users = np.unique(y)
+    for i in range(int(len(users))):
+        y[y == users[i]] = i
+   # for i in range(int(len(xs)/nchunks)):
+   #     user = y[i*nchunks]
+   #     y[i*nchunks:(i+1)*nchunks] = i
    # plt.scatter(xs, ys, c=y, s=25, alpha=1, cmap='tab20')
     plt.scatter(xs, ys, c=y, s=100, cmap='tab20b', alpha=1.0, edgecolor='None')
     plt.xticks([])
@@ -181,7 +185,7 @@ def plot_tsne(X, y, scenarios):
     #for i in range(len(xs)):
        #  plt.text(xs[i], ys[i], str(y[i]), color='k', ha='center', va='center', fontsize=10)# + ' ' + str(scenarios[i]))
    # pdb.set_trace()
-    plt.savefig('/Users/evan/Code/Insight/plots/tsne/tsne_test.pdf', bbox_inches='tight', pad_inches=0.01)
+    plt.savefig(saveto, bbox_inches='tight', pad_inches=0.01)
     plt.close('all')
 
     return
