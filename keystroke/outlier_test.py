@@ -4,12 +4,13 @@ from sklearn.neighbors import LocalOutlierFactor
 import numpy as np
 import pandas as pd
 from keystroke import features, plotting
+import pdb
 
 import itertools
 import os
 import keystroke
 
-bins_per_scen = keystroke.bins_per_scen
+bins_per_scen = 8
 
 def main():
 
@@ -52,7 +53,7 @@ def main():
 
 def outlier_test(df_user, df_imposter, Pthresh):
 
-   # clf = OneClassSVM(nu=0.01, kernel="linear", gamma=0.01)
+    #lf = OneClassSVM(nu=0.01, kernel="rbf", gamma=0.01, shrinking=False)
    # clf = EllipticEnvelope(contamination=0.01)
    # clf = LocalOutlierFactor(novelty=True, n_neighbors=5)
     clf = IsolationForest(n_estimators=100, contamination=0.25, max_features=20, random_state=10, verbose=False)
@@ -81,6 +82,7 @@ def outlier_test(df_user, df_imposter, Pthresh):
 
         user_fit = train_mod(clf, df1.values)
         diffscen_pred = predict_mod(user_fit, df2.values)
+       # pdb.set_trace()
 
         Nright = len(diffscen_pred[diffscen_pred == 1])
         Nwrong = len(diffscen_pred[diffscen_pred == -1])
